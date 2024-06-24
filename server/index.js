@@ -38,6 +38,34 @@ const server = EXPRESS();
 const PORT_NUMBER = process.env.PORT_NUMBER || 9090;
 const API_NAMESPACE = `/api/v1`;
 
+/**
+ * Returns an array of strings of the available compnay roles or an Error if the
+ * database has not loaded, failed to load or a js error occurs.
+ * @returns {Array<string>|Error}
+ */
+function getRoles() {
+	// GUARD: database loading failed
+	if (DB_STATES.failed === DB.state) {
+		throw new Error("Database did not load successfully.");
+	}
+
+	// GUARD: Database is still loading
+	if (DB_STATES.loading === DB.state) {
+		throw new Error("Database is still loading.");
+	}
+
+	try {
+		// GUARD confirm that DB has the roles key
+		let key = `roles`;
+		if (false === DB.data.hasOwnProperty(`${key}`)) {
+			throw new Error(`Missing '${key}' field in database.`);
+		}
+		return DB.data.roles;
+	} catch (error) {
+		throw new Error(`Failed to retrieve roles: ${error.message}`);
+	}
+}
+
 // start server
 server.listen(PORT_NUMBER, () => {
 	console.log(`Server running on port: ${PORT_NUMBER}`);
@@ -47,4 +75,17 @@ server.listen(PORT_NUMBER, () => {
 server.get(`${API_NAMESPACE}`, (request, response) => {
 	response.status(200);
 	response.json(`API is active`);
+});
+
+// [GET] user roles - return all available job types for the company
+server.get(`${API_NAMESPACE}/roles`, (request, response) => {
+	try {
+		response.status(200);
+		response.json({
+			roles: getRoles(),
+		});
+	} catch (error) {
+		response.status(501);
+		response.send(`${error.message}`);
+	}
 });
