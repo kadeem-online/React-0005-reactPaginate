@@ -6,6 +6,7 @@ DOTENV.config();
 
 const server = EXPRESS();
 const PORT_NUMBER = process.env.PORT_NUMBER || 9090;
+const API_NAMESPACE = `/api/v1`;
 
 // start server
 server.listen(PORT_NUMBER, () => {
@@ -13,7 +14,7 @@ server.listen(PORT_NUMBER, () => {
 });
 
 // set base API route
-server.get("/", (request, response) => {
+server.get(`${API_NAMESPACE}`, (request, response) => {
 	response.status(200);
 	response.json(`API is active`);
 });
