@@ -4,6 +4,9 @@ import { dirname, join } from "path";
 import { fileURLToPath } from "url";
 import FS from "fs";
 
+// Utilities
+import { API_ERROR, API_STATUS_CODES } from "./utils.js";
+
 // Load .env variables
 DOTENV.config();
 
@@ -23,16 +26,22 @@ const DB = {
 	data: {},
 };
 const DB_PATH = join(__dirname, "database.json");
-FS.readFile(DB_PATH, `utf-8`, (error, data) => {
-	if (error) {
-		DB.state = DB_STATES.failed;
-		DB.errors = [error.message];
-	} else {
-		DB.state = DB_STATES.active;
-		DB.data = JSON.parse(data);
-	}
-	return;
-});
+
+try {
+	FS.readFile(DB_PATH, `utf-8`, (error, data) => {
+		if (error) {
+			DB.state = DB_STATES.failed;
+			DB.errors = [error.message];
+		} else {
+			DB.state = DB_STATES.active;
+			DB.data = JSON.parse(data);
+		}
+		return;
+	});
+} catch (error) {
+	DB.state = DB_STATES.failed;
+	DB.errors = [error.message];
+}
 
 const server = EXPRESS();
 const PORT_NUMBER = process.env.PORT_NUMBER || 9090;
@@ -46,23 +55,41 @@ const API_NAMESPACE = `/api/v1`;
 function getRoles() {
 	// GUARD: database loading failed
 	if (DB_STATES.failed === DB.state) {
-		throw new Error("Database did not load successfully.");
+		throw new API_ERROR(
+			API_STATUS_CODES.InternalServerError.code,
+			API_STATUS_CODES.InternalServerError.text,
+			`${DB.errors[0]}`
+		);
 	}
 
 	// GUARD: Database is still loading
 	if (DB_STATES.loading === DB.state) {
-		throw new Error("Database is still loading.");
+		throw new API_ERROR(
+			API_STATUS_CODES.ServiceUnavailable.code,
+			API_STATUS_CODES.ServiceUnavailable.text,
+			"Database is initializing..."
+		);
+	}
+
+	// GUARD confirm that DB has the roles key
+	let key = `roles`;
+	if (false === DB.data.hasOwnProperty(`${key}`)) {
+		throw new API_ERROR(
+			API_STATUS_CODES.InternalServerError.code,
+			API_STATUS_CODES.InternalServerError.text,
+			`Missing '${key}' field in database.`
+		);
 	}
 
 	try {
-		// GUARD confirm that DB has the roles key
-		let key = `roles`;
-		if (false === DB.data.hasOwnProperty(`${key}`)) {
-			throw new Error(`Missing '${key}' field in database.`);
-		}
+		// returns roles array
 		return DB.data.roles;
 	} catch (error) {
-		throw new Error(`Failed to retrieve roles: ${error.message}`);
+		throw new API_ERROR(
+			API_STATUS_CODES.InternalServerError.code,
+			API_STATUS_CODES.InternalServerError.text,
+			error.message
+		);
 	}
 }
 
@@ -85,7 +112,19 @@ server.get(`${API_NAMESPACE}/roles`, (request, response) => {
 			roles: getRoles(),
 		});
 	} catch (error) {
-		response.status(501);
-		response.send(`${error.message}`);
+		// GUARD: Handle any Errors of type 'API_ERROR'
+		if (error instanceof API_ERROR) {
+			response.status(error.code);
+			response.statusMessage = error.statusText;
+			response.send(error.message);
+			return;
+		}
+
+		// Handle any other types of errors
+		response.status(API_STATUS_CODES.InternalServerError.code);
+		response.statusMessage = API_STATUS_CODES.InternalServerError.text;
+		let message = `Error ${API_STATUS_CODES.InternalServerError.code}: `;
+		message += `${API_STATUS_CODES.InternalServerError.text}`;
+		response.send(message);
 	}
 });
