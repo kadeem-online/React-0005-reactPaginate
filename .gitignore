@@ -25,3 +25,6 @@ dist-ssr
 
 # Environemt File
 .env
+
+# local databases
+*.db
